@@ -8,6 +8,7 @@ import NotFound from "./pages/NotFound";
 import EmbedTrophies from "./pages/embed/Trophies";
 import EmbedStats from "./pages/embed/Stats";
 import EmbedRank from "./pages/embed/Rank";
+import EmbedContributions from "./pages/embed/Contributions";
 
 const queryClient = new QueryClient();
 
@@ -22,6 +23,7 @@ const App = () => (
           <Route path="/:username/trophies" element={<EmbedTrophies />} />
           <Route path="/:username/stats" element={<EmbedStats />} />
           <Route path="/:username/rank" element={<EmbedRank />} />
+          <Route path="/:username/contributions" element={<EmbedContributions />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
