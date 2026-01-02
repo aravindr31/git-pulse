@@ -10,9 +10,11 @@ import { RepoStats } from '@/components/RepoStats';
 import { BottomPill } from '@/components/BottomPill';
 import { TrophyDisplay } from '@/components/TrophyDisplay';
 import { UserRank } from '@/components/UserRank';
+import ContributionChart from '@/components/ContributionChart';
 import { fetchGitHubUser, fetchGitHubRepos, fetchGitHubEvents, calculateLanguageStats } from '@/lib/github';
 import { calculateTrophies } from '@/lib/trophies';
 import { calculateUserRank } from '@/lib/ranking';
+import { calculateContributions } from '@/lib/contributions';
 
 const Index = () => {
   const [searchedUsername, setSearchedUsername] = useState<string | null>(null);
@@ -39,6 +41,7 @@ const Index = () => {
   const languageStats = repos ? calculateLanguageStats(repos) : {};
   const trophies = user && repos ? calculateTrophies(user, repos, events || []) : [];
   const rank = user && repos ? calculateUserRank(user, repos) : null;
+  const contributions = events ? calculateContributions(events) : null;
 
   const handleSearch = (username: string) => {
     setSearchedUsername(username);
@@ -110,6 +113,9 @@ const Index = () => {
 
               {/* Trophies */}
               <TrophyDisplay trophies={trophies} />
+
+              {/* Contribution Chart */}
+              {contributions && <ContributionChart data={contributions} />}
 
               {/* Stats grid */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
