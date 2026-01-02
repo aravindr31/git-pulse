@@ -5,6 +5,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
+import EmbedTrophies from "./pages/embed/Trophies";
+import EmbedStats from "./pages/embed/Stats";
+import EmbedRank from "./pages/embed/Rank";
 
 const queryClient = new QueryClient();
 
@@ -16,6 +19,9 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
+          <Route path="/:username/trophies" element={<EmbedTrophies />} />
+          <Route path="/:username/stats" element={<EmbedStats />} />
+          <Route path="/:username/rank" element={<EmbedRank />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
