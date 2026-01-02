@@ -8,13 +8,14 @@ import { LanguageChart } from '@/components/LanguageChart';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import { RepoStats } from '@/components/RepoStats';
 import { BottomPill } from '@/components/BottomPill';
+import { TrophyDisplay } from '@/components/TrophyDisplay';
+import { UserRank } from '@/components/UserRank';
 import { fetchGitHubUser, fetchGitHubRepos, fetchGitHubEvents, calculateLanguageStats } from '@/lib/github';
-import { useToast } from '@/hooks/use-toast';
+import { calculateTrophies } from '@/lib/trophies';
+import { calculateUserRank } from '@/lib/ranking';
 
 const Index = () => {
   const [searchedUsername, setSearchedUsername] = useState<string | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const { toast } = useToast();
 
   const { data: user, isLoading: userLoading, error: userError } = useQuery({
     queryKey: ['github-user', searchedUsername],
@@ -36,24 +37,11 @@ const Index = () => {
   });
 
   const languageStats = repos ? calculateLanguageStats(repos) : {};
+  const trophies = user && repos ? calculateTrophies(user, repos, events || []) : [];
+  const rank = user && repos ? calculateUserRank(user, repos) : null;
 
   const handleSearch = (username: string) => {
     setSearchedUsername(username);
-  };
-
-  const handleLogin = () => {
-    toast({
-      title: "GitHub OAuth",
-      description: "To enable GitHub OAuth login, connect Lovable Cloud for backend authentication support.",
-    });
-  };
-
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-    toast({
-      title: "Logged out",
-      description: "You have been logged out successfully.",
-    });
   };
 
   return (
@@ -83,10 +71,12 @@ const Index = () => {
             </div>
           )}
 
-          {/* Search bar */}
-          <div className="mb-8">
-            <UsernameSearch onSearch={handleSearch} isLoading={userLoading} />
-          </div>
+          {/* Search bar - only show when no results */}
+          {!searchedUsername && (
+            <div className="mb-8">
+              <UsernameSearch onSearch={handleSearch} isLoading={userLoading} />
+            </div>
+          )}
 
           {/* Error state */}
           {userError && (
@@ -110,8 +100,16 @@ const Index = () => {
           {/* Dashboard */}
           {user && !userLoading && (
             <div className="space-y-6">
-              {/* Profile card */}
-              <ProfileCard user={user} />
+              {/* Profile card with rank */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2">
+                  <ProfileCard user={user} />
+                </div>
+                {rank && <UserRank rank={rank} />}
+              </div>
+
+              {/* Trophies */}
+              <TrophyDisplay trophies={trophies} />
 
               {/* Stats grid */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -157,10 +155,9 @@ const Index = () => {
 
       {/* Bottom pill navigation */}
       <BottomPill
-        isAuthenticated={isAuthenticated}
-        onLogin={handleLogin}
-        onLogout={handleLogout}
         username={user?.login}
+        onSearch={handleSearch}
+        hasResults={!!user}
       />
     </div>
   );
