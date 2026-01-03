@@ -13,6 +13,13 @@ export default {
     const username = url.searchParams.get('username');
     const path = url.pathname;
 
+	if (!env.GITHUB_TOKEN) {
+      return new Response("Error: GITHUB_TOKEN is missing from environment", { status: 500 });
+    }
+	if (!env.CLIENT_API_KEY){
+		return new Response("Error: CLIENT_API_KEY is missing from environment", { status: 500 });
+	}
+
     // 1. Basic Validation
     if (!username) {
       return new Response('Error: Username parameter is required', { 
