@@ -1,7 +1,8 @@
 import { useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { fetchGitHubData } from "@/lib/github";
+// import { fetchGitHubData } from "@/lib/github";
 import { calculateTrophies, getTierColor } from "@/lib/badges";
+import { fetchGitHubData } from "@/lib/github";
 
 export default function Badges() {
   const { username } = useParams<{ username: string }>();

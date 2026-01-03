@@ -1,7 +1,7 @@
 import { GitHubUser, GitHubRepo, GitHubEvent, LanguageStats } from '@/types/github';
 
 const GITHUB_GRAPHQL_URL = 'https://api.github.com/graphql';
-const TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
+// const TOKEN = import.meta.env.VITE_GITHUB_TOKEN;
 
 /**
  * Query to get basic user info and account creation date
@@ -92,24 +92,18 @@ interface ContributionDay {
   count: number;
 }
 
-/**
- * Fetches contributions for a specific year
- */
-async function fetchContributionsForYear(
-  username: string,
-  year: number,
-  isCurrentYear: boolean = false
-) {
+async function fetchContributionsForYear(username: string, year: number, token?: string) {
+  const currentYear = new Date().getFullYear();
+  const isCurrentYear = year === currentYear;
   const from = `${year}-01-01T00:00:00Z`;
-  const to = isCurrentYear
-    ? new Date().toISOString()
-    : `${year}-12-31T23:59:59Z`;
+  const to = isCurrentYear ? new Date().toISOString() : `${year}-12-31T23:59:59Z`;
 
   const response = await fetch(GITHUB_GRAPHQL_URL, {
     method: 'POST',
     headers: {
-      Authorization: `bearer ${TOKEN}`,
+      'Authorization': `bearer ${token}`,
       'Content-Type': 'application/json',
+      'User-Agent': 'Cloudflare-Worker-App',
     },
     body: JSON.stringify({
       query: CONTRIBUTIONS_QUERY,
@@ -117,92 +111,22 @@ async function fetchContributionsForYear(
     }),
   });
 
-  if (!response.ok) {
-    throw new Error(`GitHub API returned ${response.status}`);
-  }
-
+  if (!response.ok) return null;
   const result = await response.json();
-
-  if (result.errors) {
-    throw new Error(result.errors[0].message);
-  }
-
+  if (result.errors) return null;
   return result.data.user.contributionsCollection;
 }
 
 /**
- * Fetches all contributions since account creation
+ * Main Data Fetcher
  */
-async function fetchAllContributions(username: string, createdAt: string) {
-  const accountCreationDate = new Date(createdAt);
-  const startYear = accountCreationDate.getFullYear();
-  const currentYear = new Date().getFullYear();
-
-  const allContributionDays: ContributionDay[] = [];
-  let totalStats = {
-    totalCommitContributions: 0,
-    totalPullRequestReviewContributions: 0,
-    totalIssueContributions: 0,
-    totalRepositoryContributions: 0,
-    restrictedContributionsCount: 0,
-  };
-
-  console.log(`Fetching contributions from ${startYear} to ${currentYear}...`);
-
-  // Fetch contributions year by year with a small delay to avoid rate limiting
-  for (let year = startYear; year <= currentYear; year++) {
-    console.log(`Fetching year ${year}...`);
-    
-    const isCurrentYear = year === currentYear;
-    const contributionsData = await fetchContributionsForYear(
-      username,
-      year,
-      isCurrentYear
-    );
-
-    // Accumulate totals
-    totalStats.totalCommitContributions += contributionsData.totalCommitContributions;
-    totalStats.totalPullRequestReviewContributions += contributionsData.totalPullRequestReviewContributions;
-    totalStats.totalIssueContributions += contributionsData.totalIssueContributions;
-    totalStats.totalRepositoryContributions += contributionsData.totalRepositoryContributions;
-    totalStats.restrictedContributionsCount += contributionsData.restrictedContributionsCount;
-
-    // Extract contribution days
-    if (contributionsData.contributionCalendar?.weeks) {
-      const yearDays = contributionsData.contributionCalendar.weeks.flatMap(
-        (week: any) =>
-          week.contributionDays.map((day: any) => ({
-            date: day.date,
-            count: day.contributionCount,
-          }))
-      );
-      allContributionDays.push(...yearDays);
-    }
-
-    // Small delay to avoid rate limiting (optional, but recommended)
-    if (year < currentYear) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-  }
-
-  console.log(`Total contributions fetched: ${totalStats.totalCommitContributions + totalStats.totalPullRequestReviewContributions + totalStats.totalIssueContributions + totalStats.totalRepositoryContributions + totalStats.restrictedContributionsCount}`);
-
-  return {
-    contributionDays: allContributionDays,
-    stats: totalStats,
-  };
-}
-
-/**
- * Fetches the complete GitHub data including all-time contributions
- */
-export async function fetchGitHubData(username: string) {
-  // First, fetch basic user info
+export async function fetchGitHubData(username: string, token?: string, extraYears: number[] = []) {
   const basicResponse = await fetch(GITHUB_GRAPHQL_URL, {
     method: 'POST',
     headers: {
-      Authorization: `bearer ${TOKEN}`,
+      'Authorization': `bearer ${token}`,
       'Content-Type': 'application/json',
+      'User-Agent': 'Cloudflare-Worker-App',
     },
     body: JSON.stringify({
       query: USER_BASIC_INFO_QUERY,
@@ -210,40 +134,64 @@ export async function fetchGitHubData(username: string) {
     }),
   });
 
-  if (!basicResponse.ok) {
-    throw new Error(`GitHub API returned ${basicResponse.status}`);
-  }
-
   const basicResult = await basicResponse.json();
-
-  if (basicResult.errors) {
-    throw new Error(basicResult.errors[0].message);
-  }
-
+  if (basicResult.errors) throw new Error(basicResult.errors[0].message);
   const userData = basicResult.data.user;
 
-  // Fetch all contributions since account creation
-  const { contributionDays, stats } = await fetchAllContributions(
-    username,
-    userData.createdAt
+  const currentYear = new Date().getFullYear();
+  // Limit to current year + 3 extras to prevent timeouts
+  const yearsToFetch = Array.from(new Set([currentYear, ...extraYears.slice(0, 3)]));
+
+  // Parallel Fetching
+  const yearlyResults = await Promise.all(
+    yearsToFetch.map(year => fetchContributionsForYear(username, year, token))
   );
 
-  // Combine all data
+  const allContributionDays: any[] = [];
+  const totalStats = {
+    totalCommitContributions: 0,
+    totalPullRequestReviewContributions: 0,
+    totalIssueContributions: 0,
+    totalRepositoryContributions: 0,
+    restrictedContributionsCount: 0,
+  };
+
+  yearlyResults.forEach(data => {
+    if (!data) return;
+    totalStats.totalCommitContributions += data.totalCommitContributions;
+    totalStats.totalPullRequestReviewContributions += data.totalPullRequestReviewContributions;
+    totalStats.totalIssueContributions += data.totalIssueContributions;
+    totalStats.totalRepositoryContributions += data.totalRepositoryContributions;
+    totalStats.restrictedContributionsCount += data.restrictedContributionsCount;
+
+    if (data.contributionCalendar?.weeks) {
+      const days = data.contributionCalendar.weeks.flatMap((w: any) =>
+        w.contributionDays.map((d: any) => ({ date: d.date, count: d.contributionCount }))
+      );
+      allContributionDays.push(...days);
+    }
+  });
+
+  allContributionDays.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
   return {
     ...userData,
     allTimeContributions: {
-      contributionDays,
-      stats,
+      contributionDays: allContributionDays,
+      stats: totalStats,
     },
   };
 }
 
-/**
- * Legacy REST function for Events (Recent activity timeline)
- */
-export async function fetchGitHubEvents(username: string): Promise<GitHubEvent[]> {
+export async function fetchGitHubEvents(username: string,token?: string): Promise<GitHubEvent[]> {
+
+  const headers: HeadersInit = {};
+  if (token) {
+    headers['Authorization'] = `token ${token}`;
+  }
+
   const response = await fetch(
-    `https://api.github.com/users/${username}/events/public?per_page=30`
+    `https://api.github.com/users/${username}/events/public?per_page=30`, { headers }
   );
   if (!response.ok) throw new Error('Failed to fetch events');
   return response.json();
