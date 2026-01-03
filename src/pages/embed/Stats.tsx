@@ -1,86 +1,95 @@
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { fetchGitHubUser, fetchGitHubRepos } from '@/lib/github';
+import { fetchGitHubData } from '@/lib/github';
 import { calculateUserRank, getRankColor } from '@/lib/ranking';
 
-export default function EmbedStats() {
+export default function Stats() {
   const { username } = useParams<{ username: string }>();
 
-  const { data: user } = useQuery({
-    queryKey: ['github-user', username],
-    queryFn: () => fetchGitHubUser(username!),
+  const { data: githubData, isLoading, error } = useQuery({
+    queryKey: ['github-data', username],
+    queryFn: () => fetchGitHubData(username!),
     enabled: !!username,
   });
 
-  const { data: repos } = useQuery({
-    queryKey: ['github-repos', username],
-    queryFn: () => fetchGitHubRepos(username!),
-    enabled: !!username && !!user,
-  });
+  if (isLoading) return <div className="p-8 text-center animate-pulse text-muted-foreground">Fetching Your Stats...</div>;
+  if (error || !githubData) return <div style={{ padding: '16px', color: 'red' }}>User not found</div>;
 
-  const rank = user && repos ? calculateUserRank(user, repos) : null;
-  const totalStars = repos?.reduce((sum, repo) => sum + repo.stargazers_count, 0) || 0;
-  const totalForks = repos?.reduce((sum, repo) => sum + repo.forks_count, 0) || 0;
+ 
+  const rank = calculateUserRank(githubData);
 
-  if (!user) {
-    return <div>Loading...</div>;
-  }
+  const totalStars = githubData.repositories.nodes.reduce((sum: number, r: any) => sum + r.stargazerCount, 0);
+  const totalForks = githubData.repositories.nodes.reduce((sum: number, r: any) => sum + r.forkCount, 0);
 
   return (
-    <div style={{ fontFamily: 'system-ui, sans-serif', padding: '16px' }}>
-      <h2 style={{ margin: '0 0 16px 0', fontSize: '18px' }}>
-        Stats for @{username}
+    <div style={{ 
+      fontFamily: 'system-ui, -apple-system, sans-serif', 
+      padding: '20px',
+      backgroundColor: '#0d1117',
+      color: '#e6edf3',
+      borderRadius: '12px',
+      border: '1px solid #30363d',
+      maxWidth: '450px'
+    }}>
+      <h2 style={{ margin: '0 0 20px 0', fontSize: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <img src={githubData.avatarUrl} style={{ width: '24px', height: '24px', borderRadius: '50%' }} alt="" />
+        Stats for @{githubData.login}
       </h2>
       
       {rank && (
         <div style={{ 
-          display: 'inline-block', 
-          padding: '8px 16px', 
-          border: `2px solid ${getRankColor(rank.grade)}`,
-          borderRadius: '8px',
-          marginBottom: '16px'
+          display: 'flex',
+          alignItems: 'center',
+          gap: '16px',
+          padding: '16px', 
+          backgroundColor: `${getRankColor(rank.grade)}10`,
+          border: `1px solid ${getRankColor(rank.grade)}40`,
+          borderRadius: '12px',
+          marginBottom: '20px'
         }}>
-          <span style={{ fontWeight: 'bold', fontSize: '24px', color: getRankColor(rank.grade) }}>
+          <div style={{ 
+            fontSize: '32px', 
+            fontWeight: 'bold', 
+            color: getRankColor(rank.grade),
+            textShadow: `0 0 10px ${getRankColor(rank.grade)}40`
+          }}>
             {rank.grade}
-          </span>
-          <span style={{ marginLeft: '8px', color: '#666' }}>
-            Score: {rank.score}/100
-          </span>
+          </div>
+          <div>
+            <div style={{ fontSize: '12px', color: '#8b949e', textTransform: 'uppercase', letterSpacing: '1px' }}>
+              Overall Rank
+            </div>
+            <div style={{ fontSize: '14px', fontWeight: 500 }}>
+              Top {rank.percentile.toFixed(1)}% of Users
+            </div>
+          </div>
         </div>
       )}
       
-      <table style={{ borderCollapse: 'collapse', width: '100%', maxWidth: '400px' }}>
-        <tbody>
-          <tr>
-            <td style={{ padding: '8px', borderBottom: '1px solid #eee' }}>Followers</td>
-            <td style={{ padding: '8px', borderBottom: '1px solid #eee', fontWeight: 'bold' }}>{user.followers}</td>
-          </tr>
-          <tr>
-            <td style={{ padding: '8px', borderBottom: '1px solid #eee' }}>Following</td>
-            <td style={{ padding: '8px', borderBottom: '1px solid #eee', fontWeight: 'bold' }}>{user.following}</td>
-          </tr>
-          <tr>
-            <td style={{ padding: '8px', borderBottom: '1px solid #eee' }}>Public Repos</td>
-            <td style={{ padding: '8px', borderBottom: '1px solid #eee', fontWeight: 'bold' }}>{user.public_repos}</td>
-          </tr>
-          <tr>
-            <td style={{ padding: '8px', borderBottom: '1px solid #eee' }}>Public Gists</td>
-            <td style={{ padding: '8px', borderBottom: '1px solid #eee', fontWeight: 'bold' }}>{user.public_gists}</td>
-          </tr>
-          <tr>
-            <td style={{ padding: '8px', borderBottom: '1px solid #eee' }}>Total Stars</td>
-            <td style={{ padding: '8px', borderBottom: '1px solid #eee', fontWeight: 'bold' }}>{totalStars}</td>
-          </tr>
-          <tr>
-            <td style={{ padding: '8px', borderBottom: '1px solid #eee' }}>Total Forks</td>
-            <td style={{ padding: '8px', borderBottom: '1px solid #eee', fontWeight: 'bold' }}>{totalForks}</td>
-          </tr>
-          <tr>
-            <td style={{ padding: '8px' }}>Member Since</td>
-            <td style={{ padding: '8px', fontWeight: 'bold' }}>{new Date(user.created_at).toLocaleDateString()}</td>
-          </tr>
-        </tbody>
-      </table>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <StatRow label="Followers" value={githubData.followers.totalCount} />
+        <StatRow label="All-time Commits" value={githubData.contributionsCollection.totalCommitContributions} />
+        <StatRow label="Merged PRs" value={githubData.mergedPRs.totalCount} />
+        <StatRow label="Total Stars" value={totalStars} />
+        <StatRow label="Total Forks" value={totalForks} />
+        <StatRow label="Public Repos" value={githubData.repositories.totalCount} />
+        <StatRow label="Account Age" value={`${Math.floor((Date.now() - new Date(githubData.createdAt).getTime()) / (1000 * 60 * 60 * 24 * 365))} Years`} />
+      </div>
+    </div>
+  );
+}
+
+// Helper Component for cleaner rows
+function StatRow({ label, value }: { label: string, value: string | number }) {
+  return (
+    <div style={{ 
+      display: 'flex', 
+      justifyContent: 'space-between', 
+      paddingBottom: '8px', 
+      borderBottom: '1px solid #30363d' 
+    }}>
+      <span style={{ color: '#8b949e', fontSize: '14px' }}>{label}</span>
+      <span style={{ fontWeight: '600', fontSize: '14px', fontFamily: 'monospace' }}>{value}</span>
     </div>
   );
 }

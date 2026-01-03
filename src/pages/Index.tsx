@@ -10,35 +10,40 @@ import { RepoStats } from '@/components/RepoStats';
 import { BottomPill } from '@/components/BottomPill';
 import { TrophyDisplay } from '@/components/TrophyDisplay';
 import { UserRank } from '@/components/UserRank';
-import { fetchGitHubUser, fetchGitHubRepos, fetchGitHubEvents, calculateLanguageStats } from '@/lib/github';
-import { calculateTrophies } from '@/lib/trophies';
+import { 
+  fetchGitHubData, 
+  fetchGitHubEvents, 
+  calculateLanguageStats 
+} from '@/lib/github';
+import { calculateTrophies } from '@/lib/badges';
 import { calculateUserRank } from '@/lib/ranking';
 
 const Index = () => {
   const [searchedUsername, setSearchedUsername] = useState<string | null>(null);
 
-  const { data: user, isLoading: userLoading, error: userError } = useQuery({
-    queryKey: ['github-user', searchedUsername],
-    queryFn: () => fetchGitHubUser(searchedUsername!),
+  // Main GraphQL Query
+  const { data: githubData, isLoading: dataLoading, error: dataError } = useQuery({
+    queryKey: ['github-data', searchedUsername],
+    queryFn: () => fetchGitHubData(searchedUsername!),
     enabled: !!searchedUsername,
     retry: false,
   });
 
-  const { data: repos } = useQuery({
-    queryKey: ['github-repos', searchedUsername],
-    queryFn: () => fetchGitHubRepos(searchedUsername!),
-    enabled: !!searchedUsername && !!user,
-  });
-
+  // Keep REST Events for the Activity Feed (easier than GraphQL for timelines)
   const { data: events } = useQuery({
     queryKey: ['github-events', searchedUsername],
     queryFn: () => fetchGitHubEvents(searchedUsername!),
-    enabled: !!searchedUsername && !!user,
+    enabled: !!searchedUsername && !!githubData,
   });
 
-  const languageStats = repos ? calculateLanguageStats(repos) : {};
-  const trophies = user && repos ? calculateTrophies(user, repos, events || []) : [];
-  const rank = user && repos ? calculateUserRank(user, repos) : null;
+  // Process data for components
+  // Note: GraphQL returns nodes, so we map them to look like the old REST array
+  const repos = githubData?.repositories?.nodes || [];
+  const languageStats = githubData ? calculateLanguageStats(repos) : {};
+  
+  // New Trophies & Rank logic using the GraphQL object
+  const trophies = githubData ? calculateTrophies(githubData) : [];
+  const rank = githubData ? calculateUserRank(githubData) : null;
 
   const handleSearch = (username: string) => {
     setSearchedUsername(username);
@@ -52,10 +57,10 @@ const Index = () => {
         <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-accent/5 rounded-full blur-3xl" />
       </div>
 
-      {/* Main content */}
       <main className="relative z-10 px-4 py-12 pb-24">
         <div className="max-w-5xl mx-auto">
-          {/* Hero section - only show when no user searched */}
+          
+          {/* Hero section */}
           {!searchedUsername && (
             <div className="text-center mb-12 animate-fade-in">
               <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm mb-6">
@@ -66,63 +71,60 @@ const Index = () => {
                 <span className="gradient-text">GitProfile</span>
               </h1>
               <p className="text-lg text-muted-foreground max-w-md mx-auto mb-8">
-                Discover and analyze GitHub profiles with beautiful visualizations
+                Analyze GitHub profiles with GraphQL-powered insights
               </p>
             </div>
           )}
 
-          {/* Search bar - only show when no results */}
           {!searchedUsername && (
             <div className="mb-8">
-              <UsernameSearch onSearch={handleSearch} isLoading={userLoading} />
+              <UsernameSearch onSearch={handleSearch} isLoading={dataLoading} />
             </div>
           )}
 
           {/* Error state */}
-          {userError && (
+          {dataError && (
             <div className="glass-card p-6 text-center animate-fade-in">
               <Github className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
               <p className="text-destructive font-medium">User not found</p>
               <p className="text-sm text-muted-foreground mt-1">
-                Please check the username and try again
+                GitHub GraphQL API couldn't find this user.
               </p>
             </div>
           )}
 
           {/* Loading state */}
-          {userLoading && (
+          {dataLoading && (
             <div className="glass-card p-12 text-center animate-fade-in">
               <div className="h-8 w-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-4" />
-              <p className="text-muted-foreground">Loading profile...</p>
+              <p className="text-muted-foreground">Fetching deep stats...</p>
             </div>
           )}
 
           {/* Dashboard */}
-          {user && !userLoading && (
+          {githubData && !dataLoading && (
             <div className="space-y-6">
-              {/* Profile card with rank */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2">
-                  <ProfileCard user={user} />
+                  <ProfileCard user={githubData} />
                 </div>
                 {rank && <UserRank rank={rank} />}
               </div>
 
-              {/* Trophies */}
               <TrophyDisplay trophies={trophies} />
 
-              {/* Stats grid */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2">
                   <h3 className="font-semibold mb-4 flex items-center gap-2 text-lg">
                     <span className="w-2 h-2 rounded-full bg-primary" />
                     Top Repositories
                   </h3>
-                  <RepoList repos={repos || []} />
+                  {/* Passing the mapped nodes to RepoList */}
+                  <RepoList repos={repos} />
                 </div>
 
                 <div className="space-y-6">
-                  <RepoStats repos={repos || []} />
+                  <RepoStats repos={repos} />
                   <LanguageChart stats={languageStats} />
                   <ActivityFeed events={events || []} />
                 </div>
@@ -130,15 +132,15 @@ const Index = () => {
             </div>
           )}
 
-          {/* Empty state */}
-          {!searchedUsername && !userLoading && (
+          {/* Examples section */}
+          {!searchedUsername && !dataLoading && (
             <div className="glass-card p-12 text-center animate-fade-in mt-8">
               <Github className="h-16 w-16 mx-auto mb-4 text-muted-foreground/30" />
               <p className="text-muted-foreground">
-                Enter a GitHub username above to explore their profile
+                Try these popular developers
               </p>
               <div className="flex flex-wrap justify-center gap-2 mt-4">
-                {['torvalds', 'gaearon', 'sindresorhus', 'tj'].map((name) => (
+                {['torvalds', 'gaearon', 'sindresorhus', 'tj', 'shadcn'].map((name) => (
                   <button
                     key={name}
                     onClick={() => handleSearch(name)}
@@ -153,11 +155,10 @@ const Index = () => {
         </div>
       </main>
 
-      {/* Bottom pill navigation */}
       <BottomPill
-        username={user?.login}
+        username={githubData?.login}
         onSearch={handleSearch}
-        hasResults={!!user}
+        hasResults={!!githubData}
       />
     </div>
   );

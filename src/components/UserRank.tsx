@@ -1,4 +1,5 @@
-import { RankResult, getRankColor } from '@/lib/ranking';
+import { getRankColor } from '@/lib/ranking';
+import { RankResult } from '@/types/github';
 
 interface UserRankProps {
   rank: RankResult;
@@ -14,7 +15,7 @@ export function UserRank({ rank }: UserRankProps) {
       
       <div className="flex items-center gap-4">
         <div 
-          className="w-20 h-20 rounded-xl flex items-center justify-center text-3xl font-bold"
+          className="min-w-[5rem] px-2 h-20 rounded-xl flex items-center justify-center text-3xl font-bold"
           style={{ 
             backgroundColor: getRankColor(rank.grade) + '20',
             color: getRankColor(rank.grade),
@@ -41,14 +42,40 @@ export function UserRank({ rank }: UserRankProps) {
         </div>
       </div>
       
-      <div className="grid grid-cols-5 gap-2 mt-4 text-center">
-        {Object.entries(rank.breakdown).map(([key, value]) => (
-          <div key={key} className="p-2 rounded-lg bg-secondary/30">
-            <div className="text-xs text-muted-foreground capitalize">{key.replace(/([A-Z])/g, ' $1')}</div>
-            <div className="font-mono font-medium text-sm">{value}</div>
-          </div>
-        ))}
+<div className="mt-6 space-y-3">
+  {Object.entries(rank.breakdown).map(([key, value]) => {
+    const medians: Record<string, number> = {
+      followers: 100,
+      stars: 200,
+      repos: 50,
+      forks: 50,
+      accountAge: 10,
+    };
+
+    const maxValue = medians[key] || 100;
+    const percentage = Math.min(100, ((value as number) / maxValue) * 100);
+    const label = key.replace(/([A-Z])/g, ' $1');
+
+    return (
+      <div key={key} className="space-y-1">
+        <div className="flex justify-between text-xs">
+          <span className="text-muted-foreground uppercase font-semibold">{label}</span>
+          <span className="font-mono font-medium">{value}</span>
+        </div>
+        
+        <div className="h-2 w-full bg-secondary/30 rounded-full overflow-hidden">
+          <div 
+            className="h-full bg-primary transition-all duration-1000 ease-out rounded-full"
+            style={{ 
+              width: `${percentage}%`,
+              opacity: 0.4 + (percentage / 100) * 0.6 // Gets brighter as it fills
+            }}
+          />
+        </div>
       </div>
+    );
+  })}
+</div>
     </div>
   );
 }

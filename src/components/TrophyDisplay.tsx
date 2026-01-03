@@ -1,4 +1,4 @@
-import { Trophy, getTierColor } from '@/lib/trophies';
+import { Trophy, getTierColor } from '@/lib/badges';
 
 interface TrophyDisplayProps {
   trophies: Trophy[];
