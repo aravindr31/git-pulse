@@ -7,13 +7,13 @@ interface RepoStatsProps {
 }
 
 export function RepoStats({ repos }: RepoStatsProps) {
-  const totalStars = repos.reduce((sum, repo) => sum + repo.stargazers_count, 0);
-  const totalForks = repos.reduce((sum, repo) => sum + repo.forks_count, 0);
-  const totalIssues = repos.reduce((sum, repo) => sum + repo.open_issues_count, 0);
-  const totalWatchers = repos.reduce((sum, repo) => sum + repo.watchers_count, 0);
+  const totalStars = repos.reduce((sum, repo) => sum + repo.stargazerCount, 0);
+  const totalForks = repos.reduce((sum, repo) => sum + repo.forkCount, 0);
+  const totalIssues = repos.reduce((sum, repo) => sum + repo.openIssues.totalCount, 0);
+  const totalWatchers = repos.reduce((sum, repo) => sum + repo.watchers.totalCount, 0);
   
   const mostRecent = repos.length > 0 
-    ? repos.sort((a, b) => new Date(b.pushed_at).getTime() - new Date(a.pushed_at).getTime())[0]
+    ? repos.sort((a, b) => new Date(b.pushedAt).getTime() - new Date(a.pushedAt).getTime())[0]
     : null;
 
   return (
@@ -69,7 +69,7 @@ export function RepoStats({ repos }: RepoStatsProps) {
         <div className="mt-4 pt-4 border-t border-border/50">
           <p className="text-xs text-muted-foreground">
             Last active: <span className="text-foreground font-medium">{mostRecent.name}</span>
-            <span className="ml-2">{getTimeAgo(mostRecent.pushed_at)}</span>
+            <span className="ml-2">{getTimeAgo(mostRecent.pushedAt)}</span>
           </p>
         </div>
       )}

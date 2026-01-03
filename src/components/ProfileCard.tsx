@@ -14,7 +14,7 @@ export function ProfileCard({ user }: ProfileCardProps) {
         <div className="flex-shrink-0">
           <div className="relative">
             <img
-              src={user.avatar_url}
+              src={user.avatarUrl}
               alt={user.login}
               className="w-28 h-28 rounded-full border-2 border-primary/30 shadow-lg"
             />
@@ -27,7 +27,7 @@ export function ProfileCard({ user }: ProfileCardProps) {
           <div className="flex flex-wrap items-center gap-3 mb-2">
             <h2 className="text-2xl font-bold gradient-text">{user.name || user.login}</h2>
             <a
-              href={user.html_url}
+              href={user.htmlUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="font-mono text-muted-foreground hover:text-primary transition-colors"
@@ -66,7 +66,7 @@ export function ProfileCard({ user }: ProfileCardProps) {
             )}
             <span className="flex items-center gap-1.5">
               <Calendar className="h-4 w-4" />
-              Joined {formatDate(user.created_at)}
+              Joined {formatDate(user.createdAt)}
             </span>
           </div>
         </div>
@@ -75,28 +75,28 @@ export function ProfileCard({ user }: ProfileCardProps) {
       {/* Stats row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-border/50">
         <div className="stat-card text-center">
-          <div className="text-2xl font-bold gradient-text font-mono">{formatNumber(user.followers)}</div>
+          <div className="text-2xl font-bold gradient-text font-mono">{formatNumber(user.followers.totalCount)}</div>
           <div className="text-sm text-muted-foreground flex items-center justify-center gap-1">
             <Users className="h-3.5 w-3.5" />
             Followers
           </div>
         </div>
         <div className="stat-card text-center">
-          <div className="text-2xl font-bold gradient-text font-mono">{formatNumber(user.following)}</div>
+          <div className="text-2xl font-bold gradient-text font-mono">{formatNumber(user.following.totalCount)}</div>
           <div className="text-sm text-muted-foreground flex items-center justify-center gap-1">
             <Users className="h-3.5 w-3.5" />
             Following
           </div>
         </div>
         <div className="stat-card text-center">
-          <div className="text-2xl font-bold gradient-text font-mono">{formatNumber(user.public_repos)}</div>
+          <div className="text-2xl font-bold gradient-text font-mono">{formatNumber(user.repositories.totalCount)}</div>
           <div className="text-sm text-muted-foreground flex items-center justify-center gap-1">
             <BookOpen className="h-3.5 w-3.5" />
             Repos
           </div>
         </div>
         <div className="stat-card text-center">
-          <div className="text-2xl font-bold gradient-text font-mono">{formatNumber(user.public_gists)}</div>
+          <div className="text-2xl font-bold gradient-text font-mono">{formatNumber(user.publicGists.totalCount)}</div>
           <div className="text-sm text-muted-foreground flex items-center justify-center gap-1">
             <BookOpen className="h-3.5 w-3.5" />
             Gists
