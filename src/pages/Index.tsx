@@ -10,13 +10,20 @@ import { RepoStats } from '@/components/RepoStats';
 import { BottomPill } from '@/components/BottomPill';
 import { TrophyDisplay } from '@/components/TrophyDisplay';
 import { UserRank } from '@/components/UserRank';
+<<<<<<< HEAD
 import { 
   fetchGitHubData, 
   fetchGitHubEvents, 
   calculateLanguageStats 
 } from '@/lib/github';
 import { calculateTrophies } from '@/lib/badges';
+=======
+import ContributionChart from '@/components/ContributionChart';
+import { fetchGitHubUser, fetchGitHubRepos, fetchGitHubEvents, calculateLanguageStats } from '@/lib/github';
+import { calculateTrophies } from '@/lib/trophies';
+>>>>>>> main
 import { calculateUserRank } from '@/lib/ranking';
+import { calculateContributions } from '@/lib/contributions';
 
 const Index = () => {
   const [searchedUsername, setSearchedUsername] = useState<string | null>(null);
@@ -36,6 +43,7 @@ const Index = () => {
     enabled: !!searchedUsername && !!githubData,
   });
 
+<<<<<<< HEAD
   // Process data for components
   // Note: GraphQL returns nodes, so we map them to look like the old REST array
   const repos = githubData?.repositories?.nodes || [];
@@ -44,6 +52,12 @@ const Index = () => {
   // New Trophies & Rank logic using the GraphQL object
   const trophies = githubData ? calculateTrophies(githubData) : [];
   const rank = githubData ? calculateUserRank(githubData) : null;
+=======
+  const languageStats = repos ? calculateLanguageStats(repos) : {};
+  const trophies = user && repos ? calculateTrophies(user, repos, events || []) : [];
+  const rank = user && repos ? calculateUserRank(user, repos) : null;
+  const contributions = events ? calculateContributions(events) : null;
+>>>>>>> main
 
   const handleSearch = (username: string) => {
     setSearchedUsername(username);
@@ -113,6 +127,13 @@ const Index = () => {
 
               <TrophyDisplay trophies={trophies} />
 
+<<<<<<< HEAD
+=======
+              {/* Contribution Chart */}
+              {contributions && <ContributionChart data={contributions} />}
+
+              {/* Stats grid */}
+>>>>>>> main
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2">
                   <h3 className="font-semibold mb-4 flex items-center gap-2 text-lg">
