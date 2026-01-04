@@ -1,8 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 
-const API_URL = import.meta.env.DEV 
-  ? 'http://localhost:8787' 
-  : 'https://3f6510a2-github-profile-showcase-2a44709a.davidbbryan.workers.dev';
+const API_URL = import.meta.env.API_URL;
 
 const HEADERS = {
   "x-api-key": import.meta.env.VITE_CLIENT_API_KEY || '',
