@@ -1,81 +1,103 @@
-import { fetchGitHubData } from '../../src/lib/github';
+import { fetchBadgeData, fetchRankingData, fetchStreakData, fetchUnifiedDashboardData } from '../../src/lib/github';
 import { calculateTrophies, getTierColor } from '../../src/lib/badges';
 import { calculateUserRank, getRankColor } from '../../src/lib/ranking';
 import { calculateStreaks } from '../../src/lib/streak';
 export interface Env {
-  GITHUB_TOKEN: string;     // Injected by TF from KeyVault
-  CLIENT_API_KEY: string;   // Injected by TF for your React App
+  GITHUB_TOKEN: string;
+  CLIENT_API_KEY: string;
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const username = url.searchParams.get('username');
     const path = url.pathname;
+    const cache = caches.default;
+	  const corsHeaders = {
+		  "Access-Control-Allow-Origin": "*", 
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, x-api-key, Accept",
+      "Access-Control-Max-Age": "86400",
+    };
 
-	if (!env.GITHUB_TOKEN) {
-      return new Response("Error: GITHUB_TOKEN is missing from environment", { status: 500 });
-    }
-	if (!env.CLIENT_API_KEY){
-		return new Response("Error: CLIENT_API_KEY is missing from environment", { status: 500 });
-	}
+    const github_pat_token = env.GITHUB_TOKEN || null
+    const client_validation_key = env.CLIENT_API_KEY || null
 
-    // 1. Basic Validation
-    if (!username) {
-      return new Response('Error: Username parameter is required', { 
-        status: 400,
-        headers: { 'Access-Control-Allow-Origin': '*' }
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        headers: corsHeaders,
       });
     }
 
+	if (!github_pat_token) {
+      return new Response("Error: GITHUB_TOKEN is missing from environment", { status: 500 });
+    }
+	if (!client_validation_key){
+		return new Response("Error: CLIENT_API_KEY is missing from environment", { status: 500 });
+	}
+
+    if (!username) {
+      return new Response('Error: Username parameter is required', { 
+        status: 400,
+        headers: corsHeaders
+      });
+    }
+
+    const cacheKey = new Request(url.toString(), request);
+    let response = await cache.match(cacheKey);
+
+    if (response) {
+      const newHeaders = new Headers(response.headers);
+      newHeaders.set("X-Worker-Cache", "HIT");
+      return new Response(response.body, { headers: newHeaders });
+    }
+
     try {
-      // 2. Fetch shared data once to save GitHub API quota
-      const data = await fetchGitHubData(username, env.GITHUB_TOKEN);
 
-      // 3. SECURITY GATE: Require API Key ONLY for raw data path
-      if (path === '/api/data') {
+      if (path.startsWith('/api/')) {
         const incomingKey = request.headers.get('x-api-key');
-        if (incomingKey !== env.CLIENT_API_KEY) {
-          return new Response('Unauthorized: Invalid Client API Key', { status: 401 });
+        if (incomingKey !== client_validation_key) {
+          return new Response('Unauthorized: Missing or invalid x-api-key', { status: 401 });
         }
-
-        return new Response(JSON.stringify(data), {
-          headers: { 
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, OPTIONS',
-          }
-        });
       }
 
-      // 4. ROUTING LOGIC: Public Image Endpoints
-      let svgContent = '';
-      
-      if (path.endsWith('/badges')) {
+      let content: string;
+      let contentType: string;
+
+      if (path === '/api/data') {
+        content = JSON.stringify(await fetchUnifiedDashboardData(username, github_pat_token));
+        contentType = "application/json";
+      } else if (path === '/api/badges' || path === '/badges') {
+        const data = await fetchBadgeData(username, github_pat_token);
         const trophies = calculateTrophies(data);
-        svgContent = generateBadgesSVG(username, trophies);
-      } 
-      else if (path.endsWith('/rank')) {
+        content = path.includes('/api/') ? JSON.stringify(trophies) : generateBadgesSVG(username, trophies);
+        contentType = path.includes('/api/') ? "application/json" : "image/svg+xml";
+      } else if (path === '/api/rank' || path === '/rank') {
+        const data = await fetchRankingData(username, github_pat_token);
         const rank = calculateUserRank(data);
-        svgContent = generateRankSVG(username, rank);
-      } 
-      else if (path.endsWith('/streaks')) {
-        const streaks = calculateStreaks(data);
-        svgContent = generateStreaksSVG(username, streaks);
+        content = path.includes('/api/') ? JSON.stringify(rank) : generateRankSVG(username, rank);
+        contentType = path.includes('/api/') ? "application/json" : "image/svg+xml";
+      } else if (path === '/api/streaks' || path === '/streaks') {
+        const data = await fetchStreakData(username, github_pat_token);
+        const streaks = calculateStreaks(data.allTimeContributions.contributionDays, data.allTimeContributions.stats);
+        content = path.includes('/api/') ? JSON.stringify(streaks) : generateStreaksSVG(username, streaks);
+        contentType = path.includes('/api/') ? "application/json" : "image/svg+xml";
       } 
       else {
         return new Response('Welcome! Endpoints: /badges, /rank, /streaks, /api/data', { status: 200 });
       }
 
-      // 5. Return SVG with specific GitHub-friendly headers
-      return new Response(svgContent, {
+      response = new Response(content, {
         headers: {
-          'Content-Type': 'image/svg+xml',
-          'Access-Control-Allow-Origin': '*',
-          // s-maxage=14400 tells GitHub's proxy to cache the image for 4 hours
-          'Cache-Control': 'public, s-maxage=14400, max-age=3600', 
+          ...corsHeaders,
+          "Content-Type": contentType,
+          "X-Worker-Cache": "MISS",
+          'Cache-Control': 'public, s-maxage=14400, max-age=3600, stale-while-revalidate=7200', 
         },
       });
+      ctx.waitUntil(cache.put(cacheKey, response.clone()));
+
+      return response;
 
     } catch (err: any) {
       return new Response(`Worker Error: ${err.message}`, { 
@@ -197,42 +219,71 @@ function generateBadgesSVG(username: string, trophies: any[]) {
 
 
 function generateStreaksSVG(username: string, streakData: any) {
-  const primaryColor = "#ffaf60"; 
-  return `
-    <svg width="495" height="195" viewBox="0 0 495 195" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <style>
-        .header { font: 600 14px 'Segoe UI', Arial; fill: ${primaryColor}; }
-        .stat-number { font: 800 28px 'Segoe UI', Arial; fill: #c9d1d9; }
-        .stat-label { font: 400 12px 'Segoe UI', Arial; fill: #8b949e; }
-        .date-range { font: 400 10px 'monospace'; fill: #6e7681; }
-        @keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-        .bar { animation: grow 1s ease-out forwards; transform-origin: left; }
-      </style>
+  const primaryColor = "#fb8c00"; // Streak Orange
+  
+  const svg = `
+<svg width="720" height="320" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .stat-label { font: bold 10px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; fill: #8b949e; text-transform: uppercase; letter-spacing: 0.1em; }
+      .stat-value { font: bold 24px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; fill: #ffffff; }
+      .username { font: bold 18px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; fill: #ffffff; }
+      .small-text { font: 10px 'SF Mono', Monaco, monospace; fill: #6e7681; }
+      .current-streak { font: 900 60px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; fill: ${primaryColor}; }
+      .days-text { font: bold 20px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; fill: #fb8c0050; }
+      .secondary-value { font: bold 24px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; fill: #c9d1d9; }
+      .days-small { font: bold 14px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; fill: #c9d1d9; }
+      .tiny-text { font: 9px 'SF Mono', Monaco, monospace; fill: #6e7681; text-transform: uppercase; }
+    </style>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="720" height="320" rx="16" fill="#0d1117"/>
+  <rect width="720" height="320" rx="16" fill="none" stroke="#30363d" stroke-width="2"/>
+  
+  <!-- Left Section -->
+  <g>
+    <!-- Vertical Dashed Line -->
+    <line x1="251" y1="32" x2="251" y2="288" stroke="#30363d" stroke-width="2" stroke-dasharray="5,5"/>
+    
+    <!-- Header (Top) -->
+    <circle cx="40" cy="25" r="2" fill="${primaryColor}"/>
+    <text x="48" y="28" class="stat-label">Streaks</text>
+    <text x="32" y="50" class="username">@${username}</text>
+    
+    <!-- Current Streak (Centered) -->
+    <text x="32" y="100" class="stat-label">Current Streak</text>
+    <text x="32" y="170" class="current-streak">${streakData.currentStreak.days}</text>
+    <text x="${32 + (streakData.currentStreak.days.toString().length * 45)}" y="165" class="days-text">Days</text>
+    <text x="32" y="210" class="small-text">${streakData.currentStreak.from} — ${streakData.currentStreak.to}</text>
+    
+    <!-- Footer (Bottom) -->
+    <line x1="32" y1="260" x2="219" y2="260" stroke="#161b22" stroke-width="1"/>
+    <text x="32" y="260" class="small-text">GITHUB VERIFIED DATA</text>
+  </g>
+  
+  <!-- Right Section -->
+  <g>
+    <!-- Total Contributions -->
+    <text x="283" y="110" class="stat-label">Total Contributions</text>
+    <text x="${688 - (streakData.totalContributions.toString().length * 14)}" y="110" class="stat-value">${streakData.totalContributions}</text>
+    
+    <!-- Progress Bar -->
+    <rect x="283" y="120" width="405" height="6" rx="3" fill="#30363d"/>
+    <rect x="283" y="120" width="405" height="6" rx="3" fill="${primaryColor}80"/>
+    
+    <!-- Longest Streak -->
+    <text x="283" y="190" class="stat-label">Longest Streak</text>
+    <text x="${630 - (streakData.longestStreak.days.toString().length * 14)}" y="190" class="secondary-value">${streakData.longestStreak.days}</text>
+    <text x="${630 - (streakData.longestStreak.days.toString().length * 14) + (streakData.longestStreak.days.toString().length * 17)}" y="190" class="days-small">Days</text>
+    
+    <!-- Progress Bar -->
+    <rect x="283" y="200" width="405" height="6" rx="3" fill="#30363d"/>
+    <rect x="283" y="200" width="324" height="6" rx="3" fill="#8b949e"/>
+    
+    <text x="283" y="220" class="tiny-text">Peak performance: ${streakData.longestStreak.from} to ${streakData.longestStreak.to}</text>
+  </g>
+</svg>`.trim();
 
-      <rect width="493" height="193" x="1" y="1" rx="12" fill="#0d1117" stroke="#30363d" stroke-width="2"/>
-      
-      <g transform="translate(30, 45)">
-        <text class="header">CURRENT STREAK</text>
-        <text y="35" class="stat-number">${streakData.currentStreak.days} Days</text>
-        <text y="55" class="date-range">${streakData.currentStreak.from} → ${streakData.currentStreak.to}</text>
-      </g>
-
-      <line x1="247" y1="40" x2="247" y2="155" stroke="#30363d" stroke-dasharray="4 4" />
-
-      <g transform="translate(280, 45)">
-        <g>
-          <text class="stat-label">LONGEST STREAK</text>
-          <text y="25" font-size="20" font-weight="800" fill="#c9d1d9" font-family="Arial">${streakData.longestStreak.days} Days</text>
-        </g>
-        
-        <g transform="translate(0, 65)">
-          <text class="stat-label">TOTAL CONTRIBUTIONS</text>
-          <text y="25" font-size="20" font-weight="800" fill="#c9d1d9" font-family="Arial">${streakData.totalContributions}</text>
-        </g>
-      </g>
-
-      <rect x="30" y="170" width="435" height="4" fill="#30363d" rx="2" />
-      <rect x="30" y="170" width="${Math.min(435, (streakData.currentStreak.days / 30) * 435)}" height="4" fill="${primaryColor}" rx="2" class="bar" />
-    </svg>
-  `;
+  return svg;
 }

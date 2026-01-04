@@ -1,8 +1,6 @@
 import { useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-// import { fetchGitHubData } from "@/lib/github";
-import { calculateTrophies, getTierColor } from "@/lib/badges";
-import { fetchGitHubData } from "@/lib/github";
+import { getTierColor } from "@/lib/badges";
+import { useGithubBadges } from "@/hooks/useGithubQueries";
 
 export default function Badges() {
   const { username } = useParams<{ username: string }>();
@@ -11,13 +9,9 @@ export default function Badges() {
     data: githubData,
     isLoading,
     error,
-  } = useQuery({
-    queryKey: ["github-full-data", username],
-    queryFn: () => fetchGitHubData(username!),
-    enabled: !!username,
-  });
+  } = useGithubBadges(username);
 
-  const trophies = githubData ? calculateTrophies(githubData) : [];
+  const trophies = githubData 
 
   // Star count based on tier
   const getStarCount = (tier: string) => {
