@@ -1,27 +1,16 @@
-export type StreakStats = {
-  totalContributions: number;
-  currentStreak: {
-    days: number;
-    from: string | null;
-    to: string | null;
-  };
-  longestStreak: {
-    days: number;
-    from: string | null;
-    to: string | null;
-  };
-};
-
-interface ContributionDay {
+export interface ContributionDay {
   date: string;
   count: number;
 }
 
-export function calculateStreaks(githubData: any): StreakStats {
-  // Get all-time contribution data
-  const allTimeData = githubData?.allTimeContributions;
+export interface StreakStats {
+  totalContributions: number;
+  currentStreak: { days: number; from: string | null; to: string | null };
+  longestStreak: { days: number; from: string | null; to: string | null };
+}
 
-  if (!allTimeData?.contributionDays || allTimeData.contributionDays.length === 0) {
+export function calculateStreaks(contributionDays: ContributionDay[], totalStats: any): StreakStats {
+  if (!contributionDays || contributionDays.length === 0) {
     return {
       totalContributions: 0,
       currentStreak: { days: 0, from: null, to: null },
@@ -29,73 +18,65 @@ export function calculateStreaks(githubData: any): StreakStats {
     };
   }
 
-  const days: ContributionDay[] = allTimeData.contributionDays;
+  // 1. Sort days oldest to newest
+  const sortedDays = [...contributionDays].sort((a, b) => a.date.localeCompare(b.date));
 
-  // Sort days oldest to newest (should already be sorted, but just in case)
-  days.sort((a, b) => a.date.localeCompare(b.date));
+  // 2. Calculate total contributions
+  const totalContributions = 
+    (totalStats?.totalCommitContributions || 0) +
+    (totalStats?.totalPullRequestReviewContributions || 0) +
+    (totalStats?.totalIssueContributions || 0) +
+    (totalStats?.totalRepositoryContributions || 0) +
+    (totalStats?.restrictedContributionsCount || 0);
 
-  // Calculate total contributions from all-time stats
-  const stats = allTimeData.stats;
-  const totalContributions =
-    stats.totalCommitContributions +
-    stats.totalPullRequestReviewContributions +
-    stats.totalIssueContributions +
-    stats.totalRepositoryContributions +
-    stats.restrictedContributionsCount;
-
-  // ---- Calculate longest streak ----
+  // 3. Calculate longest streak
   let longestStreak = 0;
   let longestStart: string | null = null;
   let longestEnd: string | null = null;
-  let currentRun = 0;
-  let currentRunStart: string | null = null;
+  let tempRun = 0;
+  let tempStart: string | null = null;
 
-  for (const day of days) {
+  for (const day of sortedDays) {
     if (day.count > 0) {
-      currentRun++;
-      if (!currentRunStart) currentRunStart = day.date;
-
-      if (currentRun > longestStreak) {
-        longestStreak = currentRun;
-        longestStart = currentRunStart;
+      tempRun++;
+      if (!tempStart) tempStart = day.date;
+      if (tempRun > longestStreak) {
+        longestStreak = tempRun;
+        longestStart = tempStart;
         longestEnd = day.date;
       }
     } else {
-      currentRun = 0;
-      currentRunStart = null;
+      tempRun = 0;
+      tempStart = null;
     }
   }
 
-  // ---- Calculate current streak ----
+  // 4. Calculate current streak (with 48h grace period for Timezones)
   let currentStreak = 0;
   let currentStart: string | null = null;
   let currentEnd: string | null = null;
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const reversed = [...sortedDays].reverse();
+  const mostRecent = reversed.find(d => d.count > 0);
 
-  const reversed = [...days].reverse();
+  if (mostRecent) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const lastContribDate = new Date(mostRecent.date);
+    lastContribDate.setHours(0, 0, 0, 0);
 
-  // Find the most recent contribution
-  const mostRecentContribution = reversed.find((day) => day.count > 0);
+    // Calculate days between "now" and last contribution
+    const diffTime = Math.abs(today.getTime() - lastContribDate.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-  if (mostRecentContribution) {
-    const mostRecentDate = new Date(mostRecentContribution.date);
-    mostRecentDate.setHours(0, 0, 0, 0);
-
-    const daysSinceLastContribution = Math.floor(
-      (today.getTime() - mostRecentDate.getTime()) / (1000 * 60 * 60 * 24)
-    );
-
-    // If last contribution was today or yesterday (1-day grace period), count the streak
-    if (daysSinceLastContribution <= 1) {
+    // If last contrib was today or yesterday (diffDays <= 1), streak is active
+    if (diffDays <= 1) {
       for (const day of reversed) {
         if (day.count > 0) {
           currentStreak++;
           currentStart = day.date;
           if (!currentEnd) currentEnd = day.date;
         } else if (currentStreak > 0) {
-          // Once we've started counting and hit a zero, stop
           break;
         }
       }
@@ -104,15 +85,7 @@ export function calculateStreaks(githubData: any): StreakStats {
 
   return {
     totalContributions,
-    currentStreak: {
-      days: currentStreak,
-      from: currentStart,
-      to: currentEnd,
-    },
-    longestStreak: {
-      days: longestStreak,
-      from: longestStart,
-      to: longestEnd,
-    },
+    currentStreak: { days: currentStreak, from: currentStart, to: currentEnd },
+    longestStreak: { days: longestStreak, from: longestStart, to: longestEnd },
   };
 }

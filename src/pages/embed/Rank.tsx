@@ -1,18 +1,14 @@
 import { useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { fetchGitHubData } from '@/lib/github'; 
-import { calculateUserRank, getRankColor } from '@/lib/ranking';
+import { getRankColor } from '@/lib/ranking';
+import { useGithubRank } from '@/hooks/useGithubQueries';
 
 export default function Rank() {
   const { username } = useParams<{ username: string }>();
 
-  const { data: githubData, isLoading, error } = useQuery({
-    queryKey: ['github-data', username],
-    queryFn: () => fetchGitHubData(username!),
-    enabled: !!username,
-  });
+  const { data: githubData, isLoading, error } = useGithubRank(username);
+  console.log(githubData)
 
-  const rank = githubData ? calculateUserRank(githubData) : null;
+  const rank = githubData
 
 const downloadSVG = () => {
     if (!rank || !username) return;
@@ -161,7 +157,7 @@ const downloadSVG = () => {
         onClick={downloadSVG}
         className="group relative px-8 py-3 bg-white text-black rounded-full font-bold overflow-hidden transition-all hover:scale-105 active:scale-95 shadow-lg"
       >
-        <span className="relative z-10">Export Animated SVG</span>
+        <span className="relative z-10">Export SVG</span>
         <div className="absolute inset-0 bg-blue-500 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
       </button>
 
