@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 
-const API_URL = import.meta.env.API_URL;
+const API_URL = import.meta.env.VITE_API_URL;
 
 const HEADERS = {
   "x-api-key": import.meta.env.VITE_CLIENT_API_KEY || '',
